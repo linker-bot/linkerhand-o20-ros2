@@ -1,15 +1,24 @@
 #---------------------------------------------------------------------------------------------------
 # L6 L
 l6_l_min = [0, 0, 0, 0, 0, 0]
-l6_l_max = [1.54, 0.53, 1.57, 1.57, 1.57, 1.57]
+l6_l_max = [0.99, 1.39, 1.26, 1.26, 1.26, 1.26]
 l6_l_derict = [-1, -1, -1, -1, -1, -1]
 # L6 R
 l6_r_min = [0, 0, 0, 0, 0, 0]
-l6_r_max = [1.54, 0.53, 1.57, 1.57, 1.57, 1.57]
+l6_r_max = [0.99, 1.39, 1.26, 1.26, 1.26, 1.26]
 l6_r_derict = [-1, -1, -1, -1, -1, -1]
 #---------------------------------------------------------------------------------------------------
+# O6 L
+o6_l_min = [0, 0, 0, 0, 0, 0]
+o6_l_max = [0.58, 1.36, 1.6, 1.6, 1.6, 1.6]
+o6_l_derict = [-1, -1, -1, -1, -1, -1]
+# O6 R
+o6_r_min = [0, 0, 0, 0, 0, 0]
+o6_r_max = [0.58, 1.36, 1.6, 1.6, 1.6, 1.6]
+o6_r_derict = [-1, -1, -1, -1, -1, -1]
+#---------------------------------------------------------------------------------------------------
 # L7 L OK
-l7_l_min = [0, 0, 0, 0, 0, 0, -0.52]
+l7_l_min = [0, 0, 0, 0, 0, 0, 0]
 l7_l_max = [0.44, 1.43, 1.62, 1.62, 1.62, 1.62, 1.01]
 l7_l_derict = [-1, -1, -1, -1, -1, -1, -1]
 # L7 R OK (urdf后续会更改！！！)
@@ -23,8 +32,8 @@ l10_l_max = [1.45, 1.43, 1.62, 1.62, 1.62, 1.62, 0.26, 0, 0, 1.01]
 l10_l_derict = [-1, -1, -1, -1, -1, -1, 0, -1, -1, -1]
 # L10 R OK
 l10_r_min = [0, 0, 0, 0, 0, 0, -0.26, 0, 0, -0.52]
-l10_r_max = [0.75, 1.43, 1.62, 1.62, 1.62, 1.62, 0, 0.13, 0.26, 1.01]
-l10_r_derict = [-1, -1, -1, -1, -1, -1, -1, 0, 0, -1]
+l10_r_max = [0.75, 1.43, 1.62, 1.62, 1.62, 1.62, 0.21, 0.21, 0.34, 1.01]
+l10_r_derict = [-1, -1, -1, -1, -1, -1, 0, 0, 0, -1]
 #---------------------------------------------------------------------------------------------------
 # L20 L OK
 l20_l_min = [0, 0, 0, 0, 0, -0.297, -0.26, -0.26, -0.26, -0.26, 0.122, 0, 0, 0, 0, 0, 0, 0, 0, 0]
@@ -62,6 +71,11 @@ def range_to_arc_left(left_range,hand_joint):
         l_min = l6_l_min
         l_max = l6_l_max
         l_derict = l6_l_derict
+    elif hand_joint == "O6":
+        num = 6
+        l_min = o6_l_min
+        l_max = o6_l_max
+        l_derict = o6_l_derict
     elif hand_joint == "L7":
         num = 7
         l_min = l7_l_min
@@ -103,6 +117,11 @@ def range_to_arc_right(right_range,hand_joint):
         r_min = l6_r_min
         r_max = l6_r_max
         r_derict = l6_r_derict
+    elif hand_joint == "O6":
+        num = 6
+        r_min = o6_r_min
+        r_max = o6_r_max
+        r_derict = o6_r_derict
     elif hand_joint == "L7":
         num = 7
         r_min = l7_r_min
@@ -176,11 +195,11 @@ def arc_to_range_left(left_arc,hand_joint):
     '''
 def arc_to_range_left(hand_arc_l,hand_joint):
     num=0
-    if hand_joint == "L6":
+    if hand_joint == "O6":
         num = 6
-        l_min = l6_l_min
-        l_max = l6_l_max
-        l_derict = l6_l_derict
+        l_min = o6_l_min
+        l_max = o6_l_max
+        l_derict = o6_l_derict
     elif hand_joint == "L7":
         num = 7
         l_min = l7_l_min
@@ -219,11 +238,11 @@ def arc_to_range_left(hand_arc_l,hand_joint):
 
 def arc_to_range_right(right_arc,hand_joint):
     num=0
-    if hand_joint == "L6":
+    if hand_joint == "O6":
         num = 6
-        r_min = l6_r_min
-        r_max = l6_r_max
-        r_derict = l6_r_derict
+        r_min = o6_r_min
+        r_max = o6_r_max
+        r_derict = o6_r_derict
     elif hand_joint == "L7":
         num = 7
         r_min = l7_r_min

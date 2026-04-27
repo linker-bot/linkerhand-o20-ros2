@@ -1,235 +1,247 @@
-# LinkerHand灵巧手ROS2 SDK
+<img  src="resource/logo.png" width="800">
 
-## 概述
-LinkerHand O20灵巧手ROS2 SDK 是灵心巧手(北京)科技有限公司开发，用于O20 LinkerHand灵巧手的驱动软件和功能示例源码。可用于真机与仿真器使用。
+# LinkerHand灵巧手ROS2 SDK For O20
+
+# 1. **概述**
+LinkerHand灵巧手ROS SDK 是灵心巧手(北京)科技有限公司开发，用于O20等LinkerHand灵巧手的驱动软件和功能示例源码。可用于真机与仿真器使用。
 LinkerHandROS2 SDK当前支持Ubuntu22.04 ROS humble Python3.10 及以上环境
 
-## 安装
-&ensp;&ensp;当前系统环境为Ubuntu24 ROS 2 Jazzy Python3.11
-- 下载GitHub可能需要梯子
 
+
+| Name | Version | Link |
+| --- | --- | --- |
+| Python SDK | ![SDK Version](https://img.shields.io/badge/SDK%20Version-V3.0.1-brightgreen?style=flat-square) ![Python 3.8+](https://img.shields.io/badge/Python-3.8%2B-blue?style=flat-square&logo=python&logoColor=white) ![Windows 11](https://img.shields.io/badge/OS-Windows%2011-0078D4?style=flat-square&logo=windows&logoColor=white) ![Ubuntu 20.04+](https://img.shields.io/badge/OS-Ubuntu%2020.04%2B-E95420?style=flat-square&logo=ubuntu&logoColor=white) | [![GitHub 仓库](https://img.shields.io/badge/GitHub-grey?logo=github&style=flat-square)](https://github.com/linker-bot/linker-hand-O20-ros2.git) |
+| ROS2 SDK | ![SDK Version](https://img.shields.io/badge/SDK%20Version-V3.0.1-brightgreen?style=flat-square) ![Python 3.11](https://img.shields.io/badge/Python-3.11-3776AB?style=flat-square&logo=python&logoColor=white) ![Ubuntu 24.04](https://img.shields.io/badge/OS-Ubuntu%2024.04-E95420?style=flat-square&logo=ubuntu&logoColor=white) ![ROS 2 Jazzy](https://img.shields.io/badge/ROS%202-Jazzy-00B3E6?style=flat-square&logo=ros) ![Windows 11](https://img.shields.io/badge/OS-Windows%2011-0078D4?style=flat-square&logo=windows&logoColor=white) | [![GitHub 仓库](https://img.shields.io/badge/GitHub-grey?logo=github&style=flat-square)](https://github.com/linker-bot/linker-hand-O20-ros2.git) |
+
+
+# 2. **警告**
+
+1. 请保持远离灵巧手活动范围，避免造成人身伤害或设备损坏。
+
+2. 执行动作前请务必进行安全评估，以防止发生碰撞。
+
+3. 请保护好灵巧手。
+
+# 3. **版本说明**
+
+V1.0.0
+1. 支持O20版Linker Hand ROS2
+2. GUI控制界面，带有手指舞动作
+3. WIN Python Demo示例 
+
+
+
+# 4. **准备工作** Ubuntu22+
+
+## 4.1 系统与硬件需求
+
+* 操作系统：Ubuntu24.04
+
+* ROS2版本：Jazzy
+
+* Python版本：V3.12
+
+* 硬件：amd64_x86/arm64 配备 USB CANFD
+
+
+将libcanbus用命令解压到/usr/local/lib/目录下面
+
+tar -xvf libcanbus.tar -C /usr/local/lib/
+
+配置环境变量:      export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/lib
+
+libcanbus.a为静态库，libcanbus.so为共享库
+
+libcanbus_arm        编译器为    arm-linux-gnueabihf-gcc
+libcanbus_arm64      编译器为    aarch64-linux-gnu-gcc
+libcanbus(ubuntu20)  编译器为    gcc version 9.4.0
+libcanbus(ubuntu22)  编译器为    gcc version 11.3.0
+
+
+编译时先加载libcanbus库，再加载libusb库(源码注释里面有编译方法)。
+
+如果编译提示pthread相关错误，说明libcanbus.tar
+自带的libusb库不匹配， 请安装libusb库        sudo apt-get install libusb-1.0-0-dev 并删掉/usr/local/lib目录下的libusb相关库文件
+
+如果提示ludev错误，请安装libudev-dev：       sudo apt-get install libudev-dev
+
+如果编译过程中找不到cc1plus 请安装           sudo apt-get install --reinstall build-essential
+
+
+注意：root用户可直接读写usbcan设备，非root用户，需要修改usbcan模块的操作权限，可百度搜索修改方法。
+或者尝试将99-canfd.rules文件放到 /etc/udev/rules.d/， 然后执行
 ```bash
-  $ mkdir -p linker_hand_o20_ros2/src
-  $ cd linker_hand_o20_ros2/src
-  $ git clone https://github.com/linker-bot/linker-hand-o20-ros2.git
-```
-
-- 编译
-
-```bash
-  $ pip install dynamixel_sdk --break-system-packages  # U2D2需要系统权限安装，否则会报错
-  $ cd linker_hand_o20_ros2/src/
-  $ pip install -r requirements.txt
-```
-
-## 使用 for Ubuntu
-- 查看设备端口,先将USB设备插入Ubuntu设备上，在没有除鼠标键盘以外的其他USB设备的情况下，一般被识别为ttyUSB0
-```bash
-$ ls /dev/ttyUSB* # 查看USB设备端口
-$ udevadm info -a -p $(udevadm info -q path -n /dev/ttyUSB0)
-# 找到如下类似信息
-ATTRS{idVendor}=="0403" # 将值改为查到的数值
-ATTRS{idProduct}=="6014"
-ATTRS{serial}=="FT12345678"
-# 将设备信息写入udev规则文件
-$ sudo vim /etc/udev/rules.d/99-ft232h.rules
-# 写入以下内容,将值改为查到的数值 SYMLINK的值改为你期望的字符串，然后保存退出  注意：遥操模式下，应该是两个设备，注意区分SYMLINK名称
-SUBSYSTEM=="tty", ATTRS{idVendor}=="0403", ATTRS{idProduct}=="6014", ATTRS{serial}=="FTAA09QS", MODE="0666",  OWNER="root", SYMLINK+="O20_right"
-
-SUBSYSTEM=="tty", ATTRS{idVendor}=="0403", ATTRS{idProduct}=="6014", ATTRS{serial}=="FTAA08AV", MODE="0666",  OWNER="root", SYMLINK+="O20_left"
-
-
-SUBSYSTEM=="tty", ATTRS{idVendor}=="0403", ATTRS{idProduct}=="6014", ATTRS{serial}=="FTAA07LJ", MODE="0666",  OWNER="root", SYMLINK+="O20_right_master"
-
-# 重载 udev 规则
 $ sudo udevadm control --reload-rules
 $ sudo udevadm trigger
-# 验证
-$ ls -l /dev/
-# 找到如下信息即配置成功
-lrwxrwxrwx   1 root       root           7 10月 11 08:50 O20_right -> ttyUSB0
+```
+重启系统。
+
+
+
+## 4.2 下载
+
+```bash
+$ mkdir -p Linker_Hand_O20_ROS2_SDK/src    #创建目录
+$ cd Linker_Hand_O20_ROS2_SDK/src    #进入目录
+$ git clone https://github.com/linker-bot/linkerhand-o20-ros2.git
 ```
 
-&ensp;&ensp; __使用前请先将单手[linker_hand_o20.launch.py](https://github.com/linker-bot/linker-hand-o20-ros2/blob/main/linker_hand_o20/launch/linker_hand_o20.launch.py) or 双手[linker_hand_o20.launch.py](https://github.com/linker-bot/linker-hand-o20-ros2/blob/main/linker_hand_o20/launch/linker_hand_o20.launch.py)文件按照实际灵巧手参数进行配置.__
+## 4.3 安装依赖与编译
 
-- 启动SDK单手&ensp;&ensp;&ensp;&ensp;将linker_hand灵巧手的USB设备插入Ubuntu设备上  支持型号:O20
-- 启动SDK双手&ensp;&ensp;&ensp;&ensp;先将左手linker_hand灵巧手的USB设备插入Ubuntu设备上，一般被识别为/dev/ttyUSB0。再将右手linker_hand灵巧手的USB设备插入Ubuntu设备上，一般识别为/dev/ttyUSB1.  支持型号:O20
 ```bash
-
-  $ cd linker_hand_o20_ros2/
-  $ colcon build --symlink-install
-  $ source ./install/setup.bash
-  $ sudo chmod a+x src/linker_hand_o20/linker_hand_o20/linker_hand_o20.py
-  $ # 单手
-  $ ros2 launch linker_hand_o20 linker_hand_o20.launch.py
-  # 显示一下信息即启动成功
-  $ [linker_hand_o20-1] 2025-10-11 09:22:20  扫描电机中....
-  $ [linker_hand_o20-1] scan done !
-  $ [linker_hand_o20-1] 2025-10-11 09:22:20  电机ID:1 以在线，扭矩设置成功
-  $ [linker_hand_o20-1] 2025-10-11 09:22:20  电机ID:2 以在线，扭矩设置成功
-  $ [linker_hand_o20-1] 2025-10-11 09:22:20  电机ID:3 以在线，扭矩设置成功
-  $ [linker_hand_o20-1] 2025-10-11 09:22:20  电机ID:4 以在线，扭矩设置成功
-  $ [linker_hand_o20-1] 2025-10-11 09:22:20  电机ID:5 以在线，扭矩设置成功
-  $ [linker_hand_o20-1] 2025-10-11 09:22:20  电机ID:6 以在线，扭矩设置成功
-  $ [linker_hand_o20-1] 2025-10-11 09:22:20  电机ID:7 以在线，扭矩设置成功
-  $ [linker_hand_o20-1] 2025-10-11 09:22:20  电机ID:8 以在线，扭矩设置成功
-  $ [linker_hand_o20-1] 2025-10-11 09:22:20  电机ID:9 以在线，扭矩设置成功
-  $ [linker_hand_o20-1] 2025-10-11 09:22:20  电机ID:10 以在线，扭矩设置成功
-  $ [linker_hand_o20-1] 2025-10-11 09:22:20  电机ID:11 以在线，扭矩设置成功
-  $ [linker_hand_o20-1] 2025-10-11 09:22:20  电机ID:12 以在线，扭矩设置成功
-  $ [linker_hand_o20-1] 2025-10-11 09:22:20  电机ID:13 以在线，扭矩设置成功
-  $ [linker_hand_o20-1] 2025-10-11 09:22:20  电机ID:14 以在线，扭矩设置成功
-  $ [linker_hand_o20-1] 2025-10-11 09:22:20  电机ID:15 以在线，扭矩设置成功
-  $ [linker_hand_o20-1] 2025-10-11 09:22:20  电机ID:16 以在线，扭矩设置成功
-  $ [linker_hand_o20-1] 2025-10-11 09:22:20  电机ID:17 以在线，扭矩设置成功
-  $ [linker_hand_o20-1] 2025-10-11 09:22:20  电机ID:18 以在线，扭矩设置成功
-  $ [linker_hand_o20-1] 2025-10-11 09:22:20  电机ID:19 以在线，扭矩设置成功
-  $ [linker_hand_o20-1] 2025-10-11 09:22:20  电机ID:20 以在线，扭矩设置成功
-  $ [linker_hand_o20-1] 2025-10-11 09:22:21  right_O20初始化成功
+$ cd linker_hand_o20_ros2    #进入目录
+$ pip install -r requirements.txt    #安装所需依赖
+$ cd Linker_Hand_O20_ROS2_SDK # 回到工程目录
+$ colcon build --symlink-install    #编译和构建ROS包
 ```
 
-## 使用 for WIN+ROS2
-
-&ensp;&ensp; __使用前请先将 [linker_hand_o20.launch.py](https://github.com/linker-bot/linker-hand-o20-ros2/blob/main/linker_hand_o20/launch/linker_hand_o20.launch.py)文件按照实际灵巧手参数进行配置.__
-
-- 启动SDK&ensp;&ensp;&ensp;&ensp;将linker_hand灵巧手的USB转CAN设备插入WIN系统设备上  支持型号:O20
-- 注：安装好USB转CAN驱动后才可使用
+# 5 启动SDK
+- 修改src/linker_hand_o20_ros2/launch/linker_hand_o20.launch.py文件，按照文件内参数说明进行修改
 ```bash
-  $ mkdir -p linker_hand_o20_ros2/src
-  $ cd linker_hand_o20_ros2/src
-  $ git clone git clone https://github.com/linker-bot/linker-hand-o20-ros2.git
-  $ cd linker_hand_o20_ros2/
-  $ set PYTHONUTF8=1 # 设置环境变量为UTF-8编码
-  $ colcon build --symlink-install
-  $ call ./install/local_setup.bat
-  $ ros2 launch linker_hand_o20 linker_hand_o20.launch.py #先修改launch配置文件的CAN端口名称
-  # 显示一下信息即启动成功
-  $ [linker_hand_o20-1] 2025-10-11 09:22:20  扫描电机中....
-  $ [linker_hand_o20-1] scan done !
-  $ [linker_hand_o20-1] 2025-10-11 09:22:20  电机ID:1 以在线，扭矩设置成功
-  $ [linker_hand_o20-1] 2025-10-11 09:22:20  电机ID:2 以在线，扭矩设置成功
-  $ [linker_hand_o20-1] 2025-10-11 09:22:20  电机ID:3 以在线，扭矩设置成功
-  $ [linker_hand_o20-1] 2025-10-11 09:22:20  电机ID:4 以在线，扭矩设置成功
-  $ [linker_hand_o20-1] 2025-10-11 09:22:20  电机ID:5 以在线，扭矩设置成功
-  $ [linker_hand_o20-1] 2025-10-11 09:22:20  电机ID:6 以在线，扭矩设置成功
-  $ [linker_hand_o20-1] 2025-10-11 09:22:20  电机ID:7 以在线，扭矩设置成功
-  $ [linker_hand_o20-1] 2025-10-11 09:22:20  电机ID:8 以在线，扭矩设置成功
-  $ [linker_hand_o20-1] 2025-10-11 09:22:20  电机ID:9 以在线，扭矩设置成功
-  $ [linker_hand_o20-1] 2025-10-11 09:22:20  电机ID:10 以在线，扭矩设置成功
-  $ [linker_hand_o20-1] 2025-10-11 09:22:20  电机ID:11 以在线，扭矩设置成功
-  $ [linker_hand_o20-1] 2025-10-11 09:22:20  电机ID:12 以在线，扭矩设置成功
-  $ [linker_hand_o20-1] 2025-10-11 09:22:20  电机ID:13 以在线，扭矩设置成功
-  $ [linker_hand_o20-1] 2025-10-11 09:22:20  电机ID:14 以在线，扭矩设置成功
-  $ [linker_hand_o20-1] 2025-10-11 09:22:20  电机ID:15 以在线，扭矩设置成功
-  $ [linker_hand_o20-1] 2025-10-11 09:22:20  电机ID:16 以在线，扭矩设置成功
-  $ [linker_hand_o20-1] 2025-10-11 09:22:20  电机ID:17 以在线，扭矩设置成功
-  $ [linker_hand_o20-1] 2025-10-11 09:22:20  电机ID:18 以在线，扭矩设置成功
-  $ [linker_hand_o20-1] 2025-10-11 09:22:20  电机ID:19 以在线，扭矩设置成功
-  $ [linker_hand_o20-1] 2025-10-11 09:22:20  电机ID:20 以在线，扭矩设置成功
-  $ [linker_hand_o20-1] 2025-10-11 09:22:21  right_O20初始化成功
-```
-
-
-## 主从遥操模式
-```bash
-# 修改linker_hand_o20.launch.py文件，将is_slave设置为True 被控制的从动端开启被控制模式
-$ sudo vim src/linker_hand_o20/launch/linker_hand_o20.launch.py
-# 修改linker_hand_o20_teleoperated_master.launch.py文件，按照参数说明修改。默认开启失能模式
-$ sudo vim src/linker_hand_o20/launch/linker_hand_o20_teleoperated_master.launch.py
+$ cd Linker_Hand_O20_ROS2_SDK
 $ source ./install/setup.bash
-# 开启从动端灵巧手O20
-$ ros2 launch linker_hand_o20 linker_hand_o20.launch.py
-# 开启主动遥操端灵巧手O20
-$ ros2 launch linker_hand_o20 linker_hand_o20_teleoperated_master.launch.py
-# 将主动遥操端食指指尖、中指指尖、无名指指尖手动向手背方向摆动到极限位置，1秒后进入遥操模式。
-# 将主动遥操端食指指尖、中指指尖、手动向手背方向摆动到极限位置，将无名指指尖向手心方向摆动到极限位置，1秒后退出遥操模式。
+$ ros2 launch linker_hand_o20_ros2 linker_hand_o20.launch.py
+$ # 显示一下信息则连接成功
+$ [linker_hand_o20-1] [INFO] [1774851114.083196365] [linker_hand_o20]: 正在初始化...
+$ [linker_hand_o20-1]                                   Linker Hand
+$ [linker_hand_o20-1] ╭────────────┬─────────────┬────────────┬─────────────┬───────────┬────────────╮
+$ [linker_hand_o20-1] │ product_m… │ serial_num… │ software_… │ hardware_v… │ hand_type │ unique_id  │
+$ [linker_hand_o20-1] ├────────────┼─────────────┼────────────┼─────────────┼───────────┼────────────┤
+$ [linker_hand_o20-1] │    O20     │ LHO20-010…  │   1.1.0    │    1.0.0    │   left    │ 2A0037000… │
+$ [linker_hand_o20-1] ╰────────────┴─────────────┴────────────┴─────────────┴───────────┴────────────╯
+$ [linker_hand_o20-1] [INFO] [1774851116.377002867] [linker_hand_o20]: Linker Hand 连接成功！
+$ ........
 ```
-
-## 左右双手控制
+## 5.1启动GUI控制O20灵巧手
+ - 启动SDK后，新开一个终端。注:由于有界面，不能使用ssh远程连接开启GUI 或者使用X11 终端
+ - 修改gui_control/launch/gui_control.launch.py 按照参数说明，修改左手 or 右手
 ```bash
-# 新开终端开启GUI控制界面
-# 修改linker_hand_o20.launch.py文件，将is_slave设置为False，开启被注销掉的右手灵巧手O20，将is_slave设置为False
-$ sudo vim src/linker_hand_o20/launch/linker_hand_o20.launch.py
-$ source ./install/setup.bash
-# 开启左右双手灵巧手O20
-$ ros2 launch linker_hand_o20 linker_hand_o20.launch.py
-# gui_control界面控制左右双手灵巧手O20，修改gui_control.launch.py文件中的参数，开启被注销掉的右手gui控制节点。
-# 新开终端开启GUI控制界面
-$ sudo vim src/gui_control/launch/gui_control.launch.py
+$ cd linker_hand_O20_ros2
 $ source ./install/setup.bash
 $ ros2 launch gui_control gui_control.launch.py
 ```
+<img  src="resource/gui.png" width="550">
 
 
-- position手指关节顺序
-
-  O6:  ["拇指根部", "食指根部", "中指根部", "无名指根部", "小指根部", "拇指侧摆", "食指侧摆", "中指侧摆", "无名指侧摆", "小指侧摆", "拇指旋转", "食指中部", "中指中部", "无名指中部", "小拇指旋转", "拇指尖部", "食指末端", "中指末端", "无名指末端", "小指末端"],
-
-## 版本更新
-
-- > ### release_1.1.1
- - 1、支持O20版本灵巧手左右双手控制
-
-- > ### release_1.0.1
- - 1、支持O20版本灵巧手
-
-
-
-## [演示](rock_paper_scissors/)
-- [rock_paper_scissors(石头、剪刀、布)](rock_paper_scissors/)
-需要USB摄像头，通过手势识别控制LinkerHand灵巧手O20进行石头、剪刀、布的动作。修改rock_paper_scissors.launch.py文件中的参数，配置LinkerHand灵巧手类型和关节。
+# 6 TOPIC说明
 ```bash
-# 新开终端
-$ cd linker_hand_o20_ros2/
+/cb_right_hand_control_cmd # 控制右手运动话题  (0~255)
+/cb_right_hand_state # 实时当前状态 0-255
+/cb_right_hand_state_arc # 实时当前状态角度值
+```
+## 6.1 position说明
+```bash
+["拇指根部", "食指根部", "中指根部", "无名指根部", "小指根部", "拇指侧摆", "食指侧摆", "中指侧摆", "无名指侧摆", "小指侧摆", "拇指旋转", "预留", "预留", "预留", "预留", "拇指尖部", "食指末端", "中指末端", "无名指末端", "小指末端"]
+```
+
+
+## 7 WIN上位机使用方法
+ - 接通电源，USB转CANFD插在WIN11上位机下直接运行"O20灵巧手控制系统for win.exe"即可
+
+
+
+## O20左右双手使用
+ - 将两个CANFD设备插入USB上。终端查看两个设备是否存在
+```bash
+$ lsusb
+$ Bus 001 Device 001: ID 1d6b:0002 Linux Foundation 2.0 root hub
+$ Bus 001 Device 002: ID 048d:5702 Integrated Technology Express, Inc. RGB LED Controller
+$ Bus 001 Device 003: ID a8fa:8598 Com Equipment CANFD Analyser
+$ Bus 001 Device 004: ID 05e3:0608 Genesys Logic, Inc. Hub
+$ Bus 001 Device 005: ID 8087:0aaa Intel Corp. Bluetooth 9460/9560 Jefferson Peak (JfP)
+$ Bus 001 Device 006: ID a8fa:8598 Com Equipment CANFD Analyser
+$ Bus 002 Device 001: ID 1d6b:0003 Linux Foundation 3.0 root hub
+# 可以看到两个CANFD设备
+```
+ - 查看CANFD设备详细信息
+```bash
+$ lsusb -v -d a8fa:8598
+Bus 001 Device 003: ID a8fa:8598 Com Equipment CANFD Analyser
+Device Descriptor:
+  bLength                18
+  bDescriptorType         1
+  bcdUSB               2.00
+  bDeviceClass            0 [unknown]
+  bDeviceSubClass         0 [unknown]
+  bDeviceProtocol         0
+  bMaxPacketSize0        64
+  idVendor           0xa8fa Com Equipment
+  idProduct          0x8598 CANFD Analyser
+  bcdDevice            3.00
+  iManufacturer           1 Com Equipment
+  iProduct                2 CANFD Analyser
+  iSerial                 3 F0802061329D3641
+......
+Bus 001 Device 006: ID a8fa:8598 Com Equipment CANFD Analyser
+Couldn't open device, some information will be missing
+Device Descriptor:
+  bLength                18
+  bDescriptorType         1
+  bcdUSB               2.00
+  bDeviceClass            0 [unknown]
+  bDeviceSubClass         0 [unknown]
+  bDeviceProtocol         0
+  bMaxPacketSize0        64
+  idVendor           0xa8fa Com Equipment
+  idProduct          0x8598 CANFD Analyser
+  bcdDevice            3.00
+  iManufacturer           1 Com Equipment
+  iProduct                2 CANFD Analyser
+  iSerial                 3 F080205B34AB4B31
+# 可以查看到两个CANFD的iSerial序列号
+```
+ - 修改99-double-canfd.rules
+```bash
+# 设备 1 (F0802061329D3641) 左手
+SUBSYSTEM=="usb", ATTRS{idVendor}=="a8fa", ATTRS{idProduct}=="8598", ATTRS{serial}=="左手iSerial序列号", MODE="0666", GROUP="plugdev", SYMLINK+="O20_LEFT"
+
+# 设备 2 (F080205B34AB4B31) 右手
+SUBSYSTEM=="usb", ATTRS{idVendor}=="a8fa", ATTRS{idProduct}=="8598", ATTRS{serial}=="右手iSerial序列号", MODE="0666", GROUP="plugdev", SYMLINK+="O20_RIGHT"
+```
+ - 将99-double-canfd.rules复制到/etc/udev/rules.d/目录
+```bash
+$ sudo cp 99-double-canfd.rules /etc/udev/rules.d/99-double-canfd.rules
+$ sudo udevadm control --reload-rules
+$ sudo udevadm trigger
+```
+ - 查看是否配置成功
+```bash
+$ ls /dev
+# 查看是否有O20_LEFT和O20_RIGHT
+```
+ - 修改src/linker_hand_o20_ros2/launch/linker_hand_o20_double.launch.py文件，按照文件内参数说明进行修改.
+```bash
+$ cd Linker_Hand_O20_ROS2_SDK/
 $ source ./install/setup.bash
-$ ros2 launch rock_paper_scissors rock_paper_scissors.launch.py
+$ ros2 launch linker_hand_o20_ros2 linker_hand_o20_double.launch.py
+$ [linker_hand_o20-1] [INFO] [1775628433.836825414] [linker_hand_o20_left]: 正在初始化...
+$ [linker_hand_o20-2]                                   Linker Hand
+$ [linker_hand_o20-2] ╭────────────┬─────────────┬────────────┬─────────────┬───────────┬────────────╮
+$ [linker_hand_o20-2] │ product_m… │ serial_num… │ software_… │ hardware_v… │ hand_type │ unique_id  │
+$ [linker_hand_o20-2] ├────────────┼─────────────┼────────────┼─────────────┼───────────┼────────────┤
+$ [linker_hand_o20-2] │    R20     │ LR20-00-00… │     0      │     0.0     │   right   │ 4D0031000… │
+$ [linker_hand_o20-2] ╰────────────┴─────────────┴────────────┴─────────────┴───────────┴────────────╯
+$ [linker_hand_o20-1]                                   Linker Hand
+$ [linker_hand_o20-1] ╭────────────┬─────────────┬────────────┬─────────────┬───────────┬────────────╮
+$ [linker_hand_o20-1] │ product_m… │ serial_num… │ software_… │ hardware_v… │ hand_type │ unique_id  │
+$ [linker_hand_o20-1] ├────────────┼─────────────┼────────────┼─────────────┼───────────┼────────────┤
+$ [linker_hand_o20-1] │    O20    │ LHO20-010… │   2.0.6    │    1.1.0    │   left    │ 1F002E000… │
+$ [linker_hand_o20-1] ╰────────────┴─────────────┴────────────┴─────────────┴───────────┴────────────╯
+$ [linker_hand_o20-2] [INFO] [1775628435.797985553] [linker_hand_o20_right]: Linker Hand 连接成功！
+$ [linker_hand_o20-1] [INFO] [1775628436.197499722] [linker_hand_o20_left]: Linker Hand 连接成功！
 ```
 
-
-## 通用
-- [gui_control(图形界面控制)](图形界面控制)
-图形界面控制可以通过滑动块控制LinkerHand灵巧手O20各个关节独立运动。也可以通过添加按钮记录当前所有滑动块的数值，保存LinkerHand灵巧手当前各个关节运动状态。通过功能性按钮进行动作复现。    
-
-使用gui_control控制LinkerHand灵巧手:
-gui_control界面控制灵巧手需要启动linkerhand-ros2-sdk，以topic的形式对LinkerHand灵巧手进行操作
-开启ROS2 SDK后
-
-&ensp;&ensp; __使用前请先将 [gui_control.launch.py](https://github.com/linker-bot/linker-hand-o20-ros2/blob/main/gui_control/launch/gui_control.launch.py)文件按照实际灵巧手参数进行配置.__
+## Topic说明
+ - 新开一个终端，查看topic
 ```bash
-# 新开终端
-$ cd linker_hand_o20_ros2/
-$ source ./install/setup.bash
-$ ros2 launch gui_control gui_control.launch.py
+$ /cb_left_hand_control_cmd       # 左手控制话题
+$ /cb_left_hand_info              # 左手当前温度、当前电流、当前电机错误信息
+$ /cb_left_hand_matrix_touch      # 左手指尖压力传感器
+$ /cb_left_hand_matrix_touch_mass # 左手指尖压力传感器和值
+$ /cb_left_hand_state             # 左手实时状态
+$ /cb_right_hand_control_cmd      # 右手控制话题
+$ /cb_right_hand_info              # 右手当前温度、当前电流、当前电机错误信息
+$ /cb_right_hand_matrix_touch      # 右手指尖压力传感器
+$ /cb_right_hand_matrix_touch_mass # 右手指尖压力传感器和值
+$ /cb_right_hand_state             # 右手实时状态
 ```
-开启后会弹出UI界面。通过滑动条可控制相应LinkerHand灵巧手关节运动
-
-## WIN+ROS2环境下使用GUI
-&ensp;&ensp; __使用前请先将 [gui_control.launch.py](https://github.com/linker-bot/linker-hand-o20-ros2/blob/main/gui_control/launch/gui_control.launch.py)文件按照实际灵巧手参数进行配置.__
-```bash
-# 新开终端
-$ cd linker_hand_o20_ros2/
-$ call ./install/setup.bash
-$ ros2 launch gui_control gui_control.launch.py
-```
-
-
-## Topic List
-```python
-/cb_hand_setting_cmd # 设置linkerhand命令话题
-/cb_left_hand_control_cmd # 控制左手运动话题 by range 0~255 (范围)
-/cb_left_hand_control_cmd_angle # 控制左手运动话题 by angle 0°~360° (角度) 
-/cb_left_hand_info  # 左手硬件信息显示话题
-/cb_left_hand_state # 左手状态显示话题 范围
-/cb_left_hand_state_angle # 左手状态显示话题 角度
-
-/cb_right_hand_control_cmd # 控制右手运动话题 by range 0~255 (范围)
-/cb_right_hand_control_cmd_angle # 控制右手运动话题 by angle 0°~360° (角度)
-/cb_right_hand_info # 右手硬件信息显示话题
-/cb_right_hand_state # 右手状态显示话题 范围
-/cb_right_hand_state_angle # 右手状态显示话题 角度
-```
-
-
-
-
-

@@ -1,0 +1,9 @@
+V1.3.1
+1. 支持双手L20D控制
+
+
+
+V1.0.0
+1. 支持R20版Linker Hand ROS2
+2. GUI控制界面，带有手指舞动作
+3. WIN Python Demo示例 

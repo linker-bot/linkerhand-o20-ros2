@@ -1,5 +1,5 @@
 import sys
-import time
+import time, json
 import threading
 from dataclasses import dataclass
 from typing import List, Dict
@@ -9,28 +9,16 @@ from std_msgs.msg import String, Header
 from sensor_msgs.msg import JointState
 from PyQt5.QtCore import Qt, pyqtSignal, QTimer, QObject, QEvent
 from PyQt5.QtWidgets import (
-    QApplication, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
-    QSlider, QLabel, QPushButton, QGroupBox, QScrollArea, QTabWidget,
+    QApplication, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, 
+    QSlider, QLabel, QPushButton, QGroupBox, QScrollArea, QTabWidget, 
     QFrame, QSplitter, QMessageBox, QTextEdit
 )
 from PyQt5.QtGui import QFont
 
 from .utils.mapping import *
+
 from .config.constants import _HAND_CONFIGS
-
-INTERVAL = 1000  #循环动作间隔时间
-# 配置和常量定义
-@dataclass
-class HandConfig:
-    """手部配置数据类"""
-    joint_names: List[str] = None
-    joint_names_en: List[str] = None
-    init_pos: List[int] = None
-    preset_actions: Dict[str, List[int]] = None
-
-    
-
-
+LOOP_TIME = 1000 # 循环动作间隔时间 毫秒
 class ROS2NodeManager(QObject):
     """ROS2节点管理器，处理ROS通信"""
     status_updated = pyqtSignal(str, str)  # 状态类型, 消息内容
@@ -41,7 +29,7 @@ class ROS2NodeManager(QObject):
         self.publisher = None
         self.joint_state = JointState()
         self.joint_state.header = Header()
-
+        
         # 初始化ROS2节点
         self.init_node(node_name)
 
@@ -51,19 +39,19 @@ class ROS2NodeManager(QObject):
             if not rclpy.ok():
                 rclpy.init(args=None)
             self.node = Node(node_name)
-
+            
             # 声明参数
             self.node.declare_parameter('hand_type', 'left')
             self.node.declare_parameter('hand_joint', 'L10')
-            self.node.declare_parameter('topic_hz', 5)
+            self.node.declare_parameter('topic_hz', 30)
             self.node.declare_parameter('is_arc', False)
-
+            
             # 获取参数
             self.hand_type = self.node.get_parameter('hand_type').value
             self.hand_joint = self.node.get_parameter('hand_joint').value
             self.hz = self.node.get_parameter('topic_hz').value
             self.is_arc = self.node.get_parameter('is_arc').value
-
+            
             if self.is_arc == True:
                 # 创建发布者
                 self.publisher_arc = self.node.create_publisher(
@@ -73,9 +61,13 @@ class ROS2NodeManager(QObject):
             self.publisher = self.node.create_publisher(
                 JointState, f'/cb_{self.hand_type}_hand_control_cmd', 10
             )
-
+                    # 新增 speed / torque 发布者
+            self.speed_pub = self.node.create_publisher(
+                String, f'/cb_hand_setting_cmd', 10)
+            self.torque_pub = self.node.create_publisher(
+                String, f'/cb_hand_setting_cmd', 10)
             self.status_updated.emit("info", f"ROS2节点初始化成功: {self.hand_type} {self.hand_joint}")
-
+            
             # 启动ROS2自旋线程
             self.spin_thread = threading.Thread(target=self.spin_node, daemon=True)
             self.spin_thread.start()
@@ -93,40 +85,33 @@ class ROS2NodeManager(QObject):
         if not self.publisher or not self.node:
             self.status_updated.emit("error", "ROS2发布者未初始化")
             return
-
+            
         try:
             self.joint_state.header.stamp = self.node.get_clock().now().to_msg()
             self.joint_state.position = [float(pos) for pos in positions]
             # self.joint_state.velocity = [0.1] * len(positions)
             # self.joint_state.effort = [0.01] * len(positions)
             # 如果有关节名称，添加到消息中
+            #hand_config = HandConfig.from_hand_type(self.hand_joint)
             hand_config = _HAND_CONFIGS[self.hand_joint]
             if len(hand_config.joint_names) == len(positions):
                 if hand_config.joint_names_en != None:
                     self.joint_state.name = hand_config.joint_names_en
                 else:
                     self.joint_state.name = hand_config.joint_names
-
+                
             self.publisher.publish(self.joint_state)
             if self.is_arc == True:
-                p = [0] * len(positions)
-                if self.hand_joint == "L6" or self.hand_joint == "L7" or self.hand_joint == "L21" or self.hand_joint == "L25":
-
-                    p[0] = positions[2]
-                    p[1] = positions[3]
-                    p[2] = positions[5]
-                    p[3] = positions[4]
-                    p[4] = positions[1]
-                    p[5] = positions[0]
-                    # p[2] = positions[0]
-                    # p[3] = positions[1]
-                    # p[4] = positions[2]
-                    # p[5] = positions[3]
-                    # print(p, flush=True)
+                if self.hand_joint == "O6":
                     if self.hand_type == "left":
-                        pose = range_to_arc_left(p, self.hand_joint)
+                        pose = range_to_arc_left(positions,self.hand_joint)
                     elif self.hand_type == "right":
-                        pose = range_to_arc_right(p, self.hand_joint)
+                        pose = range_to_arc_right(positions,self.hand_joint)
+                elif self.hand_joint == "L7" or self.hand_joint == "L21" or self.hand_joint == "L25":
+                    if self.hand_type == "left":
+                        pose = range_to_arc_left(positions,self.hand_joint)
+                    elif self.hand_type == "right":
+                        pose = range_to_arc_right(positions,self.hand_joint)
                 elif self.hand_joint == "L10":
                     if self.hand_type == "left":
                         pose = range_to_arc_left_10(positions)
@@ -138,12 +123,54 @@ class ROS2NodeManager(QObject):
                     elif self.hand_type == "right":
                         pose = range_to_arc_right_l20(positions)
                 else:
-                    print(f"当前{self.hand_joint} {self.hand_type}不支持弧度转换", flush=True)
+                    #print(f"当前{self.hand_joint} {self.hand_type}不支持弧度转换", flush=True)
+                    pass
                 self.joint_state.position = [float(pos) for pos in pose]
                 self.publisher_arc.publish(self.joint_state)
             self.status_updated.emit("info", "关节状态已发布")
         except Exception as e:
             self.status_updated.emit("error", f"发布失败: {str(e)}")
+
+    def publish_speed(self, val: int):
+        joint_len = 0
+        if (self.hand_joint.upper() == "O6" or self.hand_joint.upper() == "L6"):
+            joint_len = 6
+        elif self.hand_joint == "L7":
+            joint_len = 7
+        elif self.hand_joint == "L10":
+            joint_len = 10
+        else:
+            joint_len = 5
+        msg = String()
+        v = [val] * joint_len
+        data = {
+            "setting_cmd": "set_speed",
+            "params": {"hand_type":self.hand_type,"speed": v},
+        }
+        msg.data = json.dumps(data)
+        print(f"速度值：{v}", flush=True)
+        self.speed_pub.publish(msg)
+
+    def publish_torque(self, val: int):
+        joint_len = 0
+        if (self.hand_joint.upper() == "O6" or self.hand_joint.upper() == "L6"):
+            joint_len = 6
+        elif self.hand_joint == "L7":
+            joint_len = 7
+        elif self.hand_joint == "L10":
+            joint_len = 10
+        else:
+            joint_len = 5
+        msg = String()
+        v = [val] * joint_len
+        data = {
+            "setting_cmd": "set_max_torque_limits",
+            "params": {"hand_type":self.hand_type,"torque": v},
+        }
+        
+        msg.data = json.dumps(data)
+        print(f"扭矩值：{v}", flush=True)
+        self.torque_pub.publish(msg)
 
     def shutdown(self):
         """关闭ROS2节点"""
@@ -152,31 +179,30 @@ class ROS2NodeManager(QObject):
         if rclpy.ok():
             rclpy.shutdown()
 
-
 class HandControlGUI(QWidget):
     """灵巧手控制界面"""
     status_updated = pyqtSignal(str, str)  # 状态类型, 消息内容
 
     def __init__(self, ros_manager: ROS2NodeManager):
         super().__init__()
-
+        
         # 循环控制变量
         self.cycle_timer = None  # 循环定时器
         self.current_action_index = -1  # 当前动作索引
         self.preset_buttons = []  # 存储预设动作按钮引用
-
+        
         # 设置ROS管理器
         self.ros_manager = ros_manager
         self.ros_manager.status_updated.connect(self.update_status)
-
+        
         # 获取手部配置
         self.hand_joint = self.ros_manager.hand_joint
         self.hand_type = self.ros_manager.hand_type
         self.hand_config = _HAND_CONFIGS[self.hand_joint]
-
+        
         # 初始化UI
         self.init_ui()
-
+        
         # 设置定时器发布关节状态
         self.publish_timer = QTimer(self)
         self.publish_timer.setInterval(int(1000 / self.ros_manager.hz))
@@ -188,7 +214,7 @@ class HandControlGUI(QWidget):
         # 设置窗口属性
         self.setWindowTitle(f'灵巧手控制界面 - {self.hand_type} {self.hand_joint}')
         self.setMinimumSize(1200, 900)
-
+        
         # 设置样式
         self.setStyleSheet("""
             QWidget {
@@ -281,35 +307,35 @@ class HandControlGUI(QWidget):
                 font-size: 12px;
             }
         """)
-
+        
         # 创建主垂直布局
         main_layout = QVBoxLayout(self)
-
+        
         # 创建水平分割器（原有三个面板）
         splitter = QSplitter(Qt.Horizontal)
-
+        
         # 创建左侧关节控制面板
         self.joint_control_panel = self.create_joint_control_panel()
         splitter.addWidget(self.joint_control_panel)
-
+        
         # 创建中间预设动作面板
         self.preset_actions_panel = self.create_preset_actions_panel()
         splitter.addWidget(self.preset_actions_panel)
-
+        
         # 创建右侧状态监控面板
         self.status_monitor_panel = self.create_status_monitor_panel()
         splitter.addWidget(self.status_monitor_panel)
-
+        
         # 设置分割器比例
         splitter.setSizes([500, 300, 400])
-
+        
         # 添加分割器到主布局，并设置拉伸因子为1（可伸缩）
         main_layout.addWidget(splitter, stretch=1)
-
+        
         # 创建并添加数值显示面板，设置拉伸因子为0（不可伸缩）
         self.value_display_panel = self.create_value_display_panel()
         main_layout.addWidget(self.value_display_panel, stretch=0)
-
+        
         # 初始更新数值显示
         self.update_value_display()
 
@@ -317,7 +343,7 @@ class HandControlGUI(QWidget):
         """创建关节控制面板"""
         panel = QWidget()
         layout = QVBoxLayout(panel)
-
+        
         # 创建标题
         title_label = QLabel(f"关节控制 - {self.hand_joint}")
         title_label.setFont(QFont("Microsoft YaHei", 14, QFont.Bold))
@@ -327,18 +353,20 @@ class HandControlGUI(QWidget):
         scroll_area = QScrollArea()
         scroll_area.setWidgetResizable(True)
         scroll_area.setFrameShape(QFrame.NoFrame)
-
+        
         scroll_content = QWidget()
         self.sliders_layout = QGridLayout(scroll_content)
         self.sliders_layout.setSpacing(10)
-
+        
         # 创建滑动条
         self.create_joint_sliders()
-
+        
         scroll_area.setWidget(scroll_content)
         layout.addWidget(scroll_area)
-
+        
         return panel
+
+    
 
     def create_joint_sliders(self):
         """创建关节滑动条"""
@@ -347,18 +375,18 @@ class HandControlGUI(QWidget):
             item = self.sliders_layout.itemAt(i)
             if item.widget():
                 item.widget().deleteLater()
-
+        
         # 创建新滑动条
         self.sliders = []
         self.slider_labels = []
-
+        
         for i, (name, value) in enumerate(zip(
-                self.hand_config.joint_names, self.hand_config.init_pos
+            self.hand_config.joint_names, self.hand_config.init_pos
         )):
             # 创建标签
             label = QLabel(f"{name}: {value}")
             label.setMinimumWidth(120)
-
+            
             # 创建滑动条
             slider = QSlider(Qt.Horizontal)
             slider.setRange(0, 255)
@@ -366,12 +394,12 @@ class HandControlGUI(QWidget):
             slider.valueChanged.connect(
                 lambda val, idx=i: self.on_slider_value_changed(idx, val)
             )
-
+            
             # 添加到布局
             row, col = divmod(i, 1)
             self.sliders_layout.addWidget(label, row, 0)
             self.sliders_layout.addWidget(slider, row, 1)
-
+            
             self.sliders.append(slider)
             self.slider_labels.append(label)
 
@@ -379,37 +407,37 @@ class HandControlGUI(QWidget):
         """创建预设动作面板"""
         panel = QWidget()
         layout = QVBoxLayout(panel)
-
+        
         # 系统预设动作
         sys_preset_group = QGroupBox("系统预设")
         sys_preset_layout = QGridLayout(sys_preset_group)
         sys_preset_layout.setSpacing(8)
-
+        
         # 添加系统预设动作按钮
         self.create_system_preset_buttons(sys_preset_layout)
         layout.addWidget(sys_preset_group)
-
+        
         # 添加动作按钮
         actions_layout = QHBoxLayout()
-
+        
         # 添加循环运行按钮
         self.cycle_button = QPushButton("循环预设动作")
         self.cycle_button.setProperty("category", "action")
         self.cycle_button.clicked.connect(self.on_cycle_clicked)
         actions_layout.addWidget(self.cycle_button)
-
+        
         self.home_button = QPushButton("回到初始位置")
         self.home_button.setProperty("category", "action")
         self.home_button.clicked.connect(self.on_home_clicked)
         actions_layout.addWidget(self.home_button)
-
+        
         self.stop_button = QPushButton("停止所有动作")
         self.stop_button.setProperty("category", "danger")
         self.stop_button.clicked.connect(self.on_stop_clicked)
         actions_layout.addWidget(self.stop_button)
-
+        
         layout.addLayout(actions_layout)
-
+        
         return panel
 
     def create_system_preset_buttons(self, parent_layout):
@@ -425,7 +453,7 @@ class HandControlGUI(QWidget):
                 )
                 buttons.append(button)
                 self.preset_buttons.append(button)  # 保存按钮引用
-
+                
             # 添加到网格布局
             cols = 2
             for i, button in enumerate(buttons):
@@ -433,26 +461,74 @@ class HandControlGUI(QWidget):
                 parent_layout.addWidget(button, row, col)
 
     def create_status_monitor_panel(self):
-        """创建状态监控面板"""
+        """创建状态监控面板（速度/扭矩各占一行，并实时显示滑块值）"""
         panel = QWidget()
         layout = QVBoxLayout(panel)
 
-        # 创建标题
+        # —— 1. 标题 ——
         title_label = QLabel("状态监控")
         title_label.setFont(QFont("Microsoft YaHei", 14, QFont.Bold))
         layout.addWidget(title_label)
 
-        # 创建标签页
+        # —— 2. 新增：速度与扭矩设置（每行一个）——
+        quick_set_gb = QGroupBox("快速设置")
+        qv_layout = QVBoxLayout(quick_set_gb)
+
+        # 速度行
+        speed_hbox = QHBoxLayout()
+        speed_hbox.addWidget(QLabel("速度:"))
+        self.speed_slider = QSlider(Qt.Horizontal)
+        self.speed_slider.setRange(0, 255)
+        self.speed_slider.setValue(255)
+        self.speed_slider.setMinimumWidth(150)
+        speed_hbox.addWidget(self.speed_slider)
+        self.speed_val_lbl = QLabel("255")          # 实时值
+        self.speed_val_lbl.setMinimumWidth(30)
+        speed_hbox.addWidget(self.speed_val_lbl)
+        self.speed_btn = QPushButton("设置速度")
+        self.speed_btn.clicked.connect(
+            lambda: (
+                self.ros_manager.publish_speed(self.speed_slider.value()),
+                self.status_updated.emit(
+                    "info", f"速度已设为 {self.speed_slider.value()}")
+            ))
+        speed_hbox.addWidget(self.speed_btn)
+        speed_hbox.addStretch()
+        qv_layout.addLayout(speed_hbox)
+
+        # 扭矩行
+        torque_hbox = QHBoxLayout()
+        torque_hbox.addWidget(QLabel("扭矩:"))
+        self.torque_slider = QSlider(Qt.Horizontal)
+        self.torque_slider.setRange(0, 255)
+        self.torque_slider.setValue(255)
+        self.torque_slider.setMinimumWidth(150)
+        torque_hbox.addWidget(self.torque_slider)
+        self.torque_val_lbl = QLabel("255")
+        self.torque_val_lbl.setMinimumWidth(30)
+        torque_hbox.addWidget(self.torque_val_lbl)
+        self.torque_btn = QPushButton("设置扭矩")
+        self.torque_btn.clicked.connect(
+            lambda: (
+                self.ros_manager.publish_torque(self.torque_slider.value()),
+                self.status_updated.emit(
+                    "info", f"扭矩已设为 {self.torque_slider.value()}")
+            ))
+        torque_hbox.addWidget(self.torque_btn)
+        torque_hbox.addStretch()
+        qv_layout.addLayout(torque_hbox)
+
+        layout.addWidget(quick_set_gb)
+
+        # —— 3. 原有标签页部分，完全不动 ——
         tab_widget = QTabWidget()
 
         # 系统信息标签页
         sys_info_widget = QWidget()
         sys_info_layout = QVBoxLayout(sys_info_widget)
 
-        # 连接状态
         conn_group = QGroupBox("连接状态")
         conn_layout = QVBoxLayout(conn_group)
-
         if self.ros_manager.publisher.get_subscription_count() > 0:
             self.connection_status = QLabel("ROS2节点已连接")
             self.connection_status.setObjectName("StatusLabel")
@@ -461,13 +537,10 @@ class HandControlGUI(QWidget):
             self.connection_status = QLabel("ROS2节点未连接")
             self.connection_status.setObjectName("StatusLabel")
             self.connection_status.setObjectName("StatusError")
-
         conn_layout.addWidget(self.connection_status)
 
-        # 手部信息
         hand_info_group = QGroupBox("手部信息")
         hand_info_layout = QVBoxLayout(hand_info_group)
-
         info_text = f"""手部类型: {self.hand_type}
 关节型号: {self.hand_joint}
 关节数量: {len(self.hand_config.joint_names)}
@@ -479,49 +552,48 @@ class HandControlGUI(QWidget):
         sys_info_layout.addWidget(conn_group)
         sys_info_layout.addWidget(hand_info_group)
         sys_info_layout.addStretch()
-
         tab_widget.addTab(sys_info_widget, "系统信息")
 
         # 状态日志标签页
         log_widget = QWidget()
         log_layout = QVBoxLayout(log_widget)
-
         self.status_log = QLabel("等待系统启动...")
         self.status_log.setObjectName("StatusLabel")
         self.status_log.setObjectName("StatusInfo")
         self.status_log.setWordWrap(True)
         self.status_log.setMinimumHeight(300)
-
         log_layout.addWidget(self.status_log)
-
-        # 清除日志按钮
         clear_log_btn = QPushButton("清除日志")
         clear_log_btn.clicked.connect(self.clear_status_log)
         log_layout.addWidget(clear_log_btn)
-
         tab_widget.addTab(log_widget, "状态日志")
 
         layout.addWidget(tab_widget)
 
+        # —— 4. 实时更新滑块值 ——
+        self.speed_slider.valueChanged.connect(
+            lambda v: self.speed_val_lbl.setText(str(v)))
+        self.torque_slider.valueChanged.connect(
+            lambda v: self.torque_val_lbl.setText(str(v)))
         return panel
 
     def create_value_display_panel(self):
         """创建滑动条数值显示面板"""
         panel = QGroupBox("关节数值列表")
         layout = QVBoxLayout(panel)
-
+        
         # 设置布局上下间隔为20像素
         layout.setContentsMargins(10, 20, 10, 20)
-
+        
         self.value_display = QTextEdit()
         self.value_display.setObjectName("ValueDisplay")
         self.value_display.setReadOnly(True)  # 设置只读模式，允许复制
         self.value_display.setMinimumHeight(60)  # 调整最小高度
         self.value_display.setMaximumHeight(80)  # 限制最大高度
         self.value_display.setText("[]")
-
+        
         layout.addWidget(self.value_display)
-
+        
         return panel
 
     def on_slider_value_changed(self, index: int, value: int):
@@ -529,7 +601,7 @@ class HandControlGUI(QWidget):
         if 0 <= index < len(self.slider_labels):
             joint_name = self.hand_config.joint_names[index]
             self.slider_labels[index].setText(f"{joint_name}: {value}")
-
+            
         # 更新数值显示
         self.update_value_display()
 
@@ -537,7 +609,7 @@ class HandControlGUI(QWidget):
         """更新数值显示面板内容"""
         # 获取所有滑动条的当前值
         values = [slider.value() for slider in self.sliders]
-
+        
         # 格式化显示为列表形式
         self.value_display.setText(f"{values}")
 
@@ -545,16 +617,16 @@ class HandControlGUI(QWidget):
         """预设动作按钮点击事件处理"""
         if len(positions) != len(self.sliders):
             QMessageBox.warning(
-                self, "动作不匹配",
+                self, "动作不匹配", 
                 f"预设动作关节数量({len(positions)})与当前关节数量({len(self.sliders)})不匹配"
             )
             return
-
+            
         # 更新滑动条
         for i, (slider, pos) in enumerate(zip(self.sliders, positions)):
             slider.setValue(pos)
             self.on_slider_value_changed(i, pos)
-
+            
         # 发布关节状态
         self.publish_joint_state()
 
@@ -562,10 +634,10 @@ class HandControlGUI(QWidget):
         """回到初始位置按钮点击事件处理"""
         for slider, pos in zip(self.sliders, self.hand_config.init_pos):
             slider.setValue(pos)
-
+            
         self.publish_joint_state()
         self.status_updated.emit("info", "回到初始位置")
-
+        
         # 更新数值显示
         self.update_value_display()
 
@@ -577,7 +649,7 @@ class HandControlGUI(QWidget):
             self.cycle_timer = None
             self.cycle_button.setText("循环运行预设动作")
             self.reset_preset_buttons_color()
-
+            
         self.status_updated.emit("warning", "已停止所有动作")
 
     def on_cycle_clicked(self):
@@ -585,7 +657,7 @@ class HandControlGUI(QWidget):
         if not self.hand_config.preset_actions:
             QMessageBox.warning(self, "无预设动作", "当前手部型号没有预设动作可循环运行")
             return
-
+            
         if self.cycle_timer and self.cycle_timer.isActive():
             # 停止循环
             self.cycle_timer.stop()
@@ -598,7 +670,7 @@ class HandControlGUI(QWidget):
             self.current_action_index = -1  # 重置索引
             self.cycle_timer = QTimer(self)
             self.cycle_timer.timeout.connect(self.run_next_action)
-            self.cycle_timer.start(INTERVAL)  # 2秒间隔interval
+            self.cycle_timer.start(LOOP_TIME)  # 2秒间隔
             self.cycle_button.setText("停止循环运行")
             self.status_updated.emit("info", "开始循环运行预设动作")
             self.run_next_action()  # 立即运行第一个动作
@@ -607,26 +679,26 @@ class HandControlGUI(QWidget):
         """运行下一个预设动作"""
         if not self.hand_config.preset_actions:
             return
-
+            
         # 重置所有按钮颜色
         self.reset_preset_buttons_color()
-
+        
         # 计算下一个动作索引
         self.current_action_index = (self.current_action_index + 1) % len(self.hand_config.preset_actions)
-
+        
         # 获取下一个动作
         action_names = list(self.hand_config.preset_actions.keys())
         action_name = action_names[self.current_action_index]
         action_positions = self.hand_config.preset_actions[action_name]
-
+        
         # 执行动作
         self.on_preset_action_clicked(action_positions)
-
+        
         # 高亮当前动作按钮
         if 0 <= self.current_action_index < len(self.preset_buttons):
             button = self.preset_buttons[self.current_action_index]
             button.setStyleSheet("background-color: green; color: white; border-color: #91D5FF;")
-
+            
         self.status_updated.emit("info", f"运行预设动作: {action_name}")
 
     def reset_preset_buttons_color(self):
@@ -642,18 +714,18 @@ class HandControlGUI(QWidget):
         """关节类型改变事件处理"""
         self.hand_joint = joint_type
         self.hand_config = _HAND_CONFIGS[self.hand_joint]
-
+        
         # 更新手部信息
         info_text = f"""手部类型: {self.hand_type}
 关节型号: {self.hand_joint}
 关节数量: {len(self.hand_config.joint_names)}
 发布频率: {self.ros_manager.hz} Hz"""
         self.hand_info_label.setText(info_text)
-
+        
         # 重新创建滑动条和预设按钮
         self.create_joint_sliders()
         self.create_system_preset_buttons(self.sys_preset_layout)  # 假设sys_preset_layout是类变量
-
+        
         # 更新数值显示
         self.update_value_display()
         self.status_updated.emit("info", f"已切换到手部型号: {joint_type}")
@@ -670,17 +742,17 @@ class HandControlGUI(QWidget):
             self.connection_status.setText("ROS2节点已连接")
             self.connection_status.setObjectName("StatusLabel")
             self.connection_status.setObjectName("StatusInfo")
-
+            
         # 更新日志
         current_time = time.strftime("%H:%M:%S")
         log_entry = f"[{current_time}] {message}\n"
         current_log = self.status_log.text()
-
+        
         if len(current_log) > 10000:  # 限制日志长度
             current_log = current_log[-10000:]
-
+            
         self.status_log.setText(log_entry + current_log)
-
+        
         # 设置日志样式
         self.status_log.setObjectName("StatusLabel")
         if status_type == "error":
@@ -700,39 +772,37 @@ class HandControlGUI(QWidget):
             self.cycle_timer.stop()
         super().closeEvent(event)
 
-
 def main(args=None):
     """主函数"""
     try:
         # 创建ROS2节点管理器
         ros_manager = ROS2NodeManager()
-
+        
         # 创建Qt应用
         app = QApplication(sys.argv)
-
+        
         # 创建GUI
         window = HandControlGUI(ros_manager)
-
+        
         # 连接状态更新信号
         ros_manager.status_updated.connect(window.update_status)
         window.status_updated = ros_manager.status_updated
-
+        
         # 显示窗口
         window.show()
-
+        
         # 运行应用
         exit_code = app.exec_()
-
+        
         # 清理ROS2
         if rclpy.ok():
             ros_manager.node.destroy_node()
             rclpy.shutdown()
-
+            
         sys.exit(exit_code)
     except Exception as e:
         print(f"应用程序启动失败: {str(e)}")
         sys.exit(1)
-
 
 if __name__ == '__main__':
     main()
