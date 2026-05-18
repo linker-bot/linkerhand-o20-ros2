@@ -1131,6 +1131,9 @@ class LinkerHandO20Controller:
                 # 读取错误状态
                 self._read_error_status()
 
+                # 读取电机电流
+                self._read_motor_currents()
+                
                 # 定期读取当前温度 (每10秒)
                 temp_read_counter += 1
                 if temp_read_counter >= temp_read_interval:
